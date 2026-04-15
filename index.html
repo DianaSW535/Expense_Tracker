@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Трекер расходов — V2</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="app-header">
+      <h1>Трекер расходов</h1>
+      <p class="app-subtitle">Учебный проект: добавление расходов и расчёт суммы по выбранному периоду с фильтрами.</p>
+    </header>
+
+    <!-- Форма добавления расхода -->
+    <section class="section" aria-labelledby="add-heading">
+      <h2 id="add-heading">Добавить расход</h2>
+      <div class="panel">
+        <!-- Сначала можно пополнить справочник магазинов -->
+        <div class="store-tools">
+          <div class="field">
+            <label for="new-store-name">Новый магазин</label>
+            <input id="new-store-name" type="text" autocomplete="off" placeholder="Например: Магнит" />
+          </div>
+          <button id="add-store" class="btn btn-secondary" type="button">Добавить магазин</button>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label for="product-name">Товар</label>
+            <input id="product-name" type="text" autocomplete="off" placeholder="Например: Молоко" />
+          </div>
+          <div class="field">
+            <label for="amount">Сумма</label>
+            <input id="amount" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0" />
+          </div>
+          <div class="field">
+            <label for="store-name">Магазин</label>
+            <select id="store-name"></select>
+          </div>
+          <div class="field">
+            <label for="expense-date">Дата</label>
+            <input id="expense-date" type="date" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="save-expense" class="btn" type="button">Сохранить</button>
+          <p id="form-message" class="message" role="status"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- V3: единый раздел для периода и фильтрации -->
+    <section class="section" aria-labelledby="filter-heading">
+      <h2 id="filter-heading">Сумма за период и фильтрация</h2>
+      <div class="panel">
+        <div class="form-grid">
+          <div class="field">
+            <label for="filter-date-from">Дата с</label>
+            <input id="filter-date-from" type="date" />
+          </div>
+          <div class="field">
+            <label for="filter-date-to">Дата по</label>
+            <input id="filter-date-to" type="date" />
+          </div>
+          <div class="field">
+            <label for="filter-store">Магазин (часть названия)</label>
+            <input id="filter-store" type="text" autocomplete="off" placeholder="Например: Лента" />
+          </div>
+          <div class="field">
+            <label for="filter-product">Товар (часть названия)</label>
+            <input id="filter-product" type="text" autocomplete="off" placeholder="Например: Хлеб" />
+          </div>
+        </div>
+        <div class="form-actions">
+          <button id="calc-period-total" class="btn" type="button">Рассчитать сумму за период</button>
+          <button id="reset-filters" class="btn btn-secondary" type="button">Сбросить фильтры</button>
+          <p id="period-message" class="message" role="status"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Сначала логика данных, затем интерфейс -->
+  <script src="expenses.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,228 @@
+/**
+ * Слой данных и расчётов для трекера расходов (V2).
+ * Без зависимостей: хранение в localStorage, простые функции.
+ * Всё в одном объекте ExpenseData — так проще подключать из app.js.
+ */
+(function (global) {
+  "use strict";
+
+  /** Ключи в localStorage — расходы и отдельный справочник магазинов. */
+  var STORAGE_KEY = "expense-tracker-v1";
+  var STORES_KEY = "expense-tracker-stores-v1";
+
+  /**
+   * Форматирует дату в локальном часовом поясе как YYYY-MM-DD (как у input type="date").
+   */
+  function formatLocalDate(date) {
+    var y = date.getFullYear();
+    var m = String(date.getMonth() + 1).padStart(2, "0");
+    var d = String(date.getDate()).padStart(2, "0");
+    return y + "-" + m + "-" + d;
+  }
+
+  /** Сегодняшняя дата в формате YYYY-MM-DD (локальный календарь). */
+  function todayLocalISO() {
+    return formatLocalDate(new Date());
+  }
+
+  /**
+   * Сдвигает дату в ISO-строке на deltaDays дней (локальный календарь).
+   */
+  function addDaysToISO(isoDateStr, deltaDays) {
+    var parts = isoDateStr.split("-");
+    var y = Number(parts[0]);
+    var mo = Number(parts[1]) - 1;
+    var day = Number(parts[2]);
+    var d = new Date(y, mo, day);
+    d.setDate(d.getDate() + deltaDays);
+    return formatLocalDate(d);
+  }
+
+  /** Общий безопасный парсер массива строк/объектов из localStorage. */
+  function loadArrayByKey(key) {
+    try {
+      var raw = global.localStorage.getItem(key);
+      if (!raw) {
+        return [];
+      }
+      var parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+      return parsed;
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** Загрузка массива расходов из localStorage; при ошибке или пустоте — []. */
+  function loadExpenses() {
+    return loadArrayByKey(STORAGE_KEY);
+  }
+
+  /** Сохранение массива расходов в localStorage. */
+  function saveExpenses(list) {
+    global.localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+  }
+
+  /** Загрузка справочника магазинов (массив строк). */
+  function loadStores() {
+    var parsed = loadArrayByKey(STORES_KEY);
+    var normalized = parsed
+      .map(function (name) {
+        return String(name || "").trim();
+      })
+      .filter(function (name) {
+        return name !== "";
+      });
+    return uniqueNormalized(normalized);
+  }
+
+  /** Сохранение справочника магазинов. */
+  function saveStores(stores) {
+    global.localStorage.setItem(STORES_KEY, JSON.stringify(stores));
+  }
+
+  /** Удаляет дубликаты магазинов с учётом регистра/пробелов для новичкового V2. */
+  function uniqueNormalized(names) {
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < names.length; i++) {
+      var value = String(names[i] || "").trim();
+      var key = value.toLowerCase();
+      if (!value || seen[key]) {
+        continue;
+      }
+      seen[key] = true;
+      result.push(value);
+    }
+    return result;
+  }
+
+  /**
+   * Добавляет магазин в справочник, если такого имени ещё нет.
+   * Возвращает объект с признаком успеха и актуальным списком.
+   */
+  function addStore(stores, storeName) {
+    var value = String(storeName || "").trim();
+    if (!value) {
+      return { ok: false, message: "Введите название магазина.", stores: stores };
+    }
+    var exists = stores.some(function (item) {
+      return String(item).toLowerCase() === value.toLowerCase();
+    });
+    if (exists) {
+      return { ok: false, message: "Такой магазин уже есть.", stores: stores };
+    }
+    stores.push(value);
+    saveStores(stores);
+    return { ok: true, stores: stores };
+  }
+
+  /** Простой id: время + случайное число (достаточно для учебного проекта). */
+  function makeId() {
+    return String(Date.now()) + "-" + String(Math.random()).slice(2, 8);
+  }
+
+  /**
+   * Добавляет расход. Поля: productName, amount (число), storeName, date (YYYY-MM-DD).
+   * Возвращает новый массив (иммутабельно не делаем — мутируем переданный list и сохраняем).
+   */
+  function addExpense(list, expense) {
+    var amountStr = String(expense.amount == null ? "" : expense.amount).trim();
+    var parsedAmount = Number(amountStr);
+    var item = {
+      id: makeId(),
+      productName: String(expense.productName || "").trim(),
+      storeName: String(expense.storeName || "").trim(),
+      amount: parsedAmount,
+      date: String(expense.date || "").trim(),
+    };
+    if (!item.productName || !item.storeName || !item.date || amountStr === "" || !isFinite(item.amount) || item.amount < 0) {
+      return { ok: false, message: "Проверьте поля: название, магазин, дата и сумма (число не меньше нуля)." };
+    }
+    list.push(item);
+    saveExpenses(list);
+    return { ok: true };
+  }
+
+  /** Сортировка: сначала новая дата, при равной дате — больший id (обычно новее). */
+  function sortByDateNewestFirst(list) {
+    return list.slice().sort(function (a, b) {
+      if (a.date !== b.date) {
+        return a.date < b.date ? 1 : -1;
+      }
+      return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+    });
+  }
+
+  /**
+   * Фильтрация: dateFrom / dateTo (YYYY-MM-DD, включительно), подстрока по магазину и товару.
+   * Пустая строка фильтра = не учитывать это условие.
+   */
+  function filterExpenses(list, filters) {
+    var dateFrom = (filters.dateFrom || "").trim();
+    var dateTo = (filters.dateTo || "").trim();
+    var storeQ = (filters.store || "").trim().toLowerCase();
+    var productQ = (filters.product || "").trim().toLowerCase();
+
+    return list.filter(function (e) {
+      if (dateFrom && e.date < dateFrom) {
+        return false;
+      }
+      if (dateTo && e.date > dateTo) {
+        return false;
+      }
+      if (storeQ && String(e.storeName).toLowerCase().indexOf(storeQ) === -1) {
+        return false;
+      }
+      if (productQ && String(e.productName).toLowerCase().indexOf(productQ) === -1) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  function sumAmounts(list) {
+    return list.reduce(function (acc, e) {
+      return acc + (isFinite(e.amount) ? e.amount : 0);
+    }, 0);
+  }
+
+  /**
+   * Сводка по списку: общая сумма, число покупок, средний чек.
+   */
+  function summaryStats(list) {
+    var count = list.length;
+    var total = sumAmounts(list);
+    var avg = count === 0 ? 0 : total / count;
+    return { total: total, count: count, average: avg };
+  }
+
+  /** Сумма всех записей в указанном диапазоне дат (включительно). */
+  function totalForPeriod(allList, dateFrom, dateTo) {
+    var from = String(dateFrom || "").trim();
+    var to = String(dateTo || "").trim();
+    if (!from || !to || from > to) {
+      return { ok: false, message: "Выберите корректный диапазон дат." };
+    }
+    var filtered = allList.filter(function (e) {
+      return e.date >= from && e.date <= to;
+    });
+    return { ok: true, total: sumAmounts(filtered), count: filtered.length };
+  }
+
+  global.ExpenseData = {
+    loadExpenses: loadExpenses,
+    saveExpenses: saveExpenses,
+    addExpense: addExpense,
+    loadStores: loadStores,
+    saveStores: saveStores,
+    addStore: addStore,
+    sortByDateNewestFirst: sortByDateNewestFirst,
+    filterExpenses: filterExpenses,
+    summaryStats: summaryStats,
+    totalForPeriod: totalForPeriod,
+    todayLocalISO: todayLocalISO,
+  };
+})(window);
