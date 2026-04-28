@@ -125,14 +125,35 @@
   }
 
   /**
-   * Добавляет расход. Поля: productName, amount (число), storeName, date (YYYY-MM-DD).
-   * Возвращает новый массив (иммутабельно не делаем — мутируем переданный list и сохраняем).
+   * Нормализует сумму из формы.
+   * Поддерживаем запись с запятой: "12,5" -> "12.5".
    */
-  function addExpense(list, expense) {
-    var amountStr = String(expense.amount == null ? "" : expense.amount).trim();
+  function normalizeAmountInput(rawAmount) {
+    return String(rawAmount == null ? "" : rawAmount)
+      .trim()
+      .replace(",", ".");
+  }
+
+  /**
+   * Безопасно сохраняет список расходов.
+   * Если localStorage недоступен или переполнен — возвращаем ошибку вместо падения.
+   */
+  function saveExpensesSafely(list) {
+    try {
+      saveExpenses(list);
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, message: "Не удалось сохранить данные: хранилище недоступно или переполнено." };
+    }
+  }
+
+  /**
+   * Проверяет поля расхода без id — общая логика для добавления и редактирования.
+   */
+  function parseExpenseFields(expense) {
+    var amountStr = normalizeAmountInput(expense.amount);
     var parsedAmount = Number(amountStr);
     var item = {
-      id: makeId(),
       productName: String(expense.productName || "").trim(),
       storeName: String(expense.storeName || "").trim(),
       amount: parsedAmount,
@@ -141,7 +162,66 @@
     if (!item.productName || !item.storeName || !item.date || amountStr === "" || !isFinite(item.amount) || item.amount < 0) {
       return { ok: false, message: "Проверьте поля: название, магазин, дата и сумма (число не меньше нуля)." };
     }
+    return { ok: true, item: item };
+  }
+
+  /**
+   * Добавляет расход. Поля: productName, amount (число), storeName, date (YYYY-MM-DD).
+   * Мутирует переданный list и сохраняет в localStorage.
+   */
+  function addExpense(list, expense) {
+    var parsed = parseExpenseFields(expense);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    var item = parsed.item;
+    item.id = makeId();
     list.push(item);
+    var saveResult = saveExpensesSafely(list);
+    if (!saveResult.ok) {
+      // Откатываем push, чтобы память и localStorage не разъехались.
+      list.pop();
+      return saveResult;
+    }
+    return { ok: true };
+  }
+
+  /** Находит индекс расхода по id или -1. */
+  function findExpenseIndex(list, id) {
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id === id) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * Обновляет расход по id теми же правилами, что и при добавлении (товар, магазин, сумма, дата).
+   */
+  function updateExpense(list, id, expense) {
+    var idx = findExpenseIndex(list, id);
+    if (idx === -1) {
+      return { ok: false, message: "Запись не найдена." };
+    }
+    var parsed = parseExpenseFields(expense);
+    if (!parsed.ok) {
+      return parsed;
+    }
+    var item = parsed.item;
+    item.id = id;
+    list[idx] = item;
+    saveExpenses(list);
+    return { ok: true };
+  }
+
+  /** Удаляет расход по id. */
+  function deleteExpense(list, id) {
+    var idx = findExpenseIndex(list, id);
+    if (idx === -1) {
+      return { ok: false, message: "Запись не найдена." };
+    }
+    list.splice(idx, 1);
     saveExpenses(list);
     return { ok: true };
   }
@@ -216,6 +296,8 @@
     loadExpenses: loadExpenses,
     saveExpenses: saveExpenses,
     addExpense: addExpense,
+    updateExpense: updateExpense,
+    deleteExpense: deleteExpense,
     loadStores: loadStores,
     saveStores: saveStores,
     addStore: addStore,

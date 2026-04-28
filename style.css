@@ -214,3 +214,89 @@ h2 {
     color: #fca5a5;
   }
 }
+
+/* Список истории покупок под формой */
+.history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-list:empty::after {
+  content: "Пока нет покупок — добавьте первую запись выше.";
+  display: block;
+  text-align: center;
+  padding: 20px 12px;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.history-item.is-editing {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.history-item .title {
+  font-weight: 600;
+}
+
+.history-item .meta {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.history-item .amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.history-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.history-actions .btn {
+  padding: 8px 12px;
+  font-size: 0.8125rem;
+}
+
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  .btn-danger {
+    background: #f87171;
+    color: #0f1219;
+  }
+
+  .btn-danger:hover {
+    background: #fca5a5;
+  }
+}

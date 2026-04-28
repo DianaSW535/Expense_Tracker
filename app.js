@@ -1,7 +1,6 @@
 /**
- * Интерфейс трекера расходов (V2).
- * Здесь только обработчики формы и вывод результата расчёта периода.
- * В V3 период и фильтры объединены в один блок.
+ * Интерфейс трекера расходов.
+ * Форма добавления / редактирования, история покупок, расчёт суммы за период (V3).
  */
 (function () {
   "use strict";
@@ -10,14 +9,20 @@
   var expenses = ExpenseData.loadExpenses();
   var stores = ExpenseData.loadStores();
 
+  /** Если не null — в форме редактируется существующая запись с этим id. */
+  var editingId = null;
+
   var elProduct = document.getElementById("product-name");
   var elAmount = document.getElementById("amount");
   var elStore = document.getElementById("store-name");
   var elDate = document.getElementById("expense-date");
   var elSave = document.getElementById("save-expense");
+  var elCancelEdit = document.getElementById("cancel-edit");
   var elNewStore = document.getElementById("new-store-name");
   var elAddStore = document.getElementById("add-store");
   var elFormMessage = document.getElementById("form-message");
+
+  var elHistoryList = document.getElementById("history-list");
 
   var elCalcPeriodTotal = document.getElementById("calc-period-total");
   var elPeriodMessage = document.getElementById("period-message");
@@ -38,16 +43,100 @@
     }).format(value);
   }
 
-  /** Отрисовка выпадающего списка магазинов. */
-  function renderStoreSelect() {
+  /** Экранирование текста перед вставкой в HTML. */
+  function escapeHtml(text) {
+    var div = document.createElement("div");
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  /** Найти покупку по id (для режима редактирования). */
+  function getExpenseById(id) {
+    for (var i = 0; i < expenses.length; i++) {
+      if (expenses[i].id === id) {
+        return expenses[i];
+      }
+    }
+    return null;
+  }
+
+  /** Есть ли магазин в справочнике (без учёта регистра). */
+  function isStoreInCatalog(storeName) {
+    var target = String(storeName || "").trim().toLowerCase();
+    if (!target) {
+      return false;
+    }
+    return stores.some(function (s) {
+      return String(s).toLowerCase() === target;
+    });
+  }
+
+  /**
+   * Заполняет выпадающий список магазинов.
+   * extraSelectedStore — если магазин записи нет в справочнике, добавляем одну опцию, чтобы можно было сохранить правку.
+   */
+  function renderStoreSelect(extraSelectedStore) {
+    elStore.innerHTML = "";
+
+    var optEmpty = document.createElement("option");
+    optEmpty.value = "";
+    optEmpty.textContent = "Выберите магазин";
+    elStore.appendChild(optEmpty);
+
     var sorted = stores.slice().sort(function (a, b) {
       return a.localeCompare(b, "ru");
     });
-    var options = ['<option value="">Выберите магазин</option>'];
     for (var i = 0; i < sorted.length; i++) {
-      options.push('<option value="' + sorted[i] + '">' + sorted[i] + "</option>");
+      var opt = document.createElement("option");
+      opt.value = sorted[i];
+      opt.textContent = sorted[i];
+      elStore.appendChild(opt);
     }
-    elStore.innerHTML = options.join("");
+
+    var extra = String(extraSelectedStore || "").trim();
+    if (extra && !isStoreInCatalog(extra)) {
+      var optExtra = document.createElement("option");
+      optExtra.value = extra;
+      optExtra.textContent = extra + " (нет в справочнике)";
+      elStore.appendChild(optExtra);
+    }
+  }
+
+  /** Список покупок под формой: новые даты сверху, кнопки «Редактировать» и «Удалить». */
+  function renderHistory() {
+    var sorted = ExpenseData.sortByDateNewestFirst(expenses);
+    elHistoryList.innerHTML = sorted
+      .map(function (e) {
+        var isRowEditing = editingId !== null && editingId === e.id;
+        return (
+          '<li class="history-item' +
+          (isRowEditing ? " is-editing" : "") +
+          '">' +
+          "<div>" +
+          '<div class="title">' +
+          escapeHtml(e.productName) +
+          "</div>" +
+          '<div class="meta">' +
+          escapeHtml(e.storeName) +
+          " · " +
+          escapeHtml(e.date) +
+          "</div>" +
+          "</div>" +
+          '<div class="amount">' +
+          formatMoney(e.amount) +
+          "</div>" +
+          '<div class="history-actions">' +
+          '<button type="button" class="btn btn-secondary js-edit" data-id="' +
+          escapeHtml(e.id) +
+          '">Редактировать</button>' +
+          '<button type="button" class="btn btn-danger js-delete" data-id="' +
+          escapeHtml(e.id) +
+          '">Удалить</button>' +
+          "</div>" +
+          "</li>"
+        );
+      })
+      .join("");
   }
 
   function readFilters() {
@@ -69,6 +158,54 @@
     elPeriodMessage.classList.toggle("error", Boolean(isError));
   }
 
+  /** Выйти из режима редактирования и очистить форму до состояния «новая покупка». */
+  function cancelEdit() {
+    editingId = null;
+    elSave.textContent = "Сохранить";
+    elCancelEdit.hidden = true;
+    elProduct.value = "";
+    elAmount.value = "";
+    elStore.value = "";
+    elDate.value = ExpenseData.todayLocalISO();
+    setFormMessage("", false);
+    renderStoreSelect();
+    renderHistory();
+  }
+
+  /** Подставить запись в форму и включить режим правки. */
+  function beginEdit(id) {
+    var row = getExpenseById(id);
+    if (!row) {
+      return;
+    }
+    editingId = id;
+    elProduct.value = row.productName;
+    elAmount.value = String(row.amount);
+    elDate.value = row.date;
+    renderStoreSelect(row.storeName);
+    elStore.value = row.storeName;
+    elSave.textContent = "Сохранить изменения";
+    elCancelEdit.hidden = false;
+    setFormMessage("Редактирование: измените поля и нажмите «Сохранить изменения».", false);
+    renderHistory();
+  }
+
+  function onDelete(id) {
+    if (!window.confirm("Удалить эту покупку?")) {
+      return;
+    }
+    var result = ExpenseData.deleteExpense(expenses, id);
+    if (!result.ok) {
+      setFormMessage(result.message, true);
+      return;
+    }
+    if (editingId === id) {
+      cancelEdit();
+    } else {
+      renderHistory();
+    }
+  }
+
   /** Добавление магазина в справочник, чтобы потом выбирать его из списка. */
   function onAddStore() {
     var result = ExpenseData.addStore(stores, elNewStore.value);
@@ -77,10 +214,16 @@
       return;
     }
     stores = result.stores;
-    renderStoreSelect();
-    elStore.value = elNewStore.value.trim();
+    var keep = editingId ? getExpenseById(editingId) : null;
+    renderStoreSelect(keep ? keep.storeName : "");
+    if (keep) {
+      elStore.value = keep.storeName;
+    } else {
+      elStore.value = elNewStore.value.trim();
+    }
     elNewStore.value = "";
     setFormMessage("Магазин добавлен в список.", false);
+    renderHistory();
   }
 
   function onSave() {
@@ -89,21 +232,36 @@
       setFormMessage("Сначала выберите магазин из выпадающего списка.", true);
       return;
     }
-    var result = ExpenseData.addExpense(expenses, {
+
+    var payload = {
       productName: elProduct.value,
       amount: elAmount.value,
       storeName: elStore.value.trim(),
       date: elDate.value,
-    });
-    if (!result.ok) {
-      setFormMessage(result.message, true);
+    };
+
+    if (editingId) {
+      var updateResult = ExpenseData.updateExpense(expenses, editingId, payload);
+      if (!updateResult.ok) {
+        setFormMessage(updateResult.message, true);
+        return;
+      }
+      setFormMessage("Изменения сохранены.", false);
+      cancelEdit();
+      return;
+    }
+
+    var addResult = ExpenseData.addExpense(expenses, payload);
+    if (!addResult.ok) {
+      setFormMessage(addResult.message, true);
       return;
     }
     elProduct.value = "";
     elAmount.value = "";
     elStore.value = "";
     elDate.value = ExpenseData.todayLocalISO();
-    setFormMessage("Расход сохранён.", false);
+    setFormMessage("Покупка сохранена.", false);
+    renderHistory();
   }
 
   function onResetFilters() {
@@ -148,8 +306,27 @@
   elFDateFrom.value = today;
   elFDateTo.value = today;
 
+  renderHistory();
+
+  elHistoryList.addEventListener("click", function (event) {
+    var target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
+    }
+    var editBtn = target.closest(".js-edit");
+    var delBtn = target.closest(".js-delete");
+    if (editBtn) {
+      beginEdit(editBtn.getAttribute("data-id") || "");
+      return;
+    }
+    if (delBtn) {
+      onDelete(delBtn.getAttribute("data-id") || "");
+    }
+  });
+
   elAddStore.addEventListener("click", onAddStore);
   elSave.addEventListener("click", onSave);
+  elCancelEdit.addEventListener("click", cancelEdit);
   elCalcPeriodTotal.addEventListener("click", onCalcPeriodTotal);
   elResetFilters.addEventListener("click", onResetFilters);
 })();

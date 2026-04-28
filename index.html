@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Трекер расходов — V2</title>
+  <title>Трекер расходов</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <main class="app">
     <header class="app-header">
       <h1>Трекер расходов</h1>
-      <p class="app-subtitle">Учебный проект: добавление расходов и расчёт суммы по выбранному периоду с фильтрами.</p>
+      <p class="app-subtitle">Учебный проект: добавление расходов, история покупок и расчёт суммы по периоду с фильтрами.</p>
     </header>
 
     <!-- Форма добавления расхода -->
@@ -45,8 +45,17 @@
         </div>
         <div class="form-actions">
           <button id="save-expense" class="btn" type="button">Сохранить</button>
+          <button id="cancel-edit" class="btn btn-secondary" type="button" hidden>Отменить редактирование</button>
           <p id="form-message" class="message" role="status"></p>
         </div>
+      </div>
+    </section>
+
+    <!-- История: все сохранённые покупки, новые сверху -->
+    <section class="section" aria-labelledby="history-heading">
+      <h2 id="history-heading">История покупок</h2>
+      <div class="panel">
+        <ul id="history-list" class="history-list"></ul>
       </div>
     </section>
 
