@@ -119,6 +119,82 @@
     return { ok: true, stores: stores };
   }
 
+  /**
+   * Переименовывает магазин в справочнике и во всех расходах.
+   * Это сохраняет согласованность данных без изменения структуры localStorage.
+   */
+  function renameStore(stores, expenses, oldName, newName) {
+    var from = String(oldName || "").trim();
+    var to = String(newName || "").trim();
+    if (!from) {
+      return { ok: false, message: "Выберите магазин для переименования.", stores: stores, expenses: expenses };
+    }
+    if (!to) {
+      return { ok: false, message: "Введите новое название магазина.", stores: stores, expenses: expenses };
+    }
+
+    var fromIndex = -1;
+    for (var i = 0; i < stores.length; i++) {
+      if (String(stores[i]).toLowerCase() === from.toLowerCase()) {
+        fromIndex = i;
+        break;
+      }
+    }
+    if (fromIndex === -1) {
+      return { ok: false, message: "Магазин не найден в справочнике.", stores: stores, expenses: expenses };
+    }
+
+    var duplicate = stores.some(function (item, idx) {
+      return idx !== fromIndex && String(item).toLowerCase() === to.toLowerCase();
+    });
+    if (duplicate) {
+      return { ok: false, message: "Магазин с таким названием уже есть.", stores: stores, expenses: expenses };
+    }
+
+    var oldStoredName = stores[fromIndex];
+    stores[fromIndex] = to;
+    for (var j = 0; j < expenses.length; j++) {
+      if (String(expenses[j].storeName) === String(oldStoredName)) {
+        expenses[j].storeName = to;
+      }
+    }
+    saveStores(stores);
+    saveExpenses(expenses);
+    return { ok: true, stores: stores, expenses: expenses };
+  }
+
+  /**
+   * Удаляет магазин из справочника, только если он не используется в расходах.
+   */
+  function deleteStore(stores, expenses, storeName) {
+    var value = String(storeName || "").trim();
+    if (!value) {
+      return { ok: false, message: "Выберите магазин для удаления.", stores: stores };
+    }
+
+    var inUse = expenses.some(function (item) {
+      return String(item.storeName).toLowerCase() === value.toLowerCase();
+    });
+    if (inUse) {
+      return { ok: false, message: "Нельзя удалить: магазин используется в расходах.", stores: stores };
+    }
+
+    var idx = -1;
+    for (var i = 0; i < stores.length; i++) {
+      if (String(stores[i]).toLowerCase() === value.toLowerCase()) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx === -1) {
+      return { ok: false, message: "Магазин не найден в справочнике.", stores: stores };
+    }
+
+    stores.splice(idx, 1);
+    saveStores(stores);
+    return { ok: true, stores: stores };
+  }
+
   /** Простой id: время + случайное число (достаточно для учебного проекта). */
   function makeId() {
     return String(Date.now()) + "-" + String(Math.random()).slice(2, 8);
@@ -153,11 +229,13 @@
   function parseExpenseFields(expense) {
     var amountStr = normalizeAmountInput(expense.amount);
     var parsedAmount = Number(amountStr);
+    var categoryValue = String(expense.category || "").trim();
     var item = {
       productName: String(expense.productName || "").trim(),
       storeName: String(expense.storeName || "").trim(),
       amount: parsedAmount,
       date: String(expense.date || "").trim(),
+      category: categoryValue || "Без категории",
     };
     if (!item.productName || !item.storeName || !item.date || amountStr === "" || !isFinite(item.amount) || item.amount < 0) {
       return { ok: false, message: "Проверьте поля: название, магазин, дата и сумма (число не меньше нуля)." };
@@ -245,8 +323,10 @@
     var dateTo = (filters.dateTo || "").trim();
     var storeQ = (filters.store || "").trim().toLowerCase();
     var productQ = (filters.product || "").trim().toLowerCase();
+    var categoryQ = (filters.category || "").trim().toLowerCase();
 
     return list.filter(function (e) {
+      var categoryValue = String(e.category || "Без категории");
       if (dateFrom && e.date < dateFrom) {
         return false;
       }
@@ -257,6 +337,9 @@
         return false;
       }
       if (productQ && String(e.productName).toLowerCase().indexOf(productQ) === -1) {
+        return false;
+      }
+      if (categoryQ && categoryQ !== "__all__" && categoryQ !== String(categoryValue).toLowerCase()) {
         return false;
       }
       return true;
@@ -301,6 +384,8 @@
     loadStores: loadStores,
     saveStores: saveStores,
     addStore: addStore,
+    renameStore: renameStore,
+    deleteStore: deleteStore,
     sortByDateNewestFirst: sortByDateNewestFirst,
     filterExpenses: filterExpenses,
     summaryStats: summaryStats,

@@ -25,6 +25,20 @@
           </div>
           <button id="add-store" class="btn btn-secondary" type="button">Добавить магазин</button>
         </div>
+        <div class="store-manage">
+          <div class="field">
+            <label for="store-edit-select">Существующие магазины</label>
+            <select id="store-edit-select"></select>
+          </div>
+          <div class="field">
+            <label for="store-rename-name">Новое название</label>
+            <input id="store-rename-name" type="text" autocomplete="off" placeholder="Новое имя магазина" />
+          </div>
+          <div class="store-manage-actions">
+            <button id="rename-store" class="btn btn-secondary" type="button">Переименовать</button>
+            <button id="delete-store" class="btn btn-danger" type="button">Удалить</button>
+          </div>
+        </div>
         <div class="form-grid">
           <div class="field">
             <label for="product-name">Товар</label>
@@ -37,6 +51,10 @@
           <div class="field">
             <label for="store-name">Магазин</label>
             <select id="store-name"></select>
+          </div>
+          <div class="field">
+            <label for="category-name">Категория</label>
+            <select id="category-name"></select>
           </div>
           <div class="field">
             <label for="expense-date">Дата</label>
@@ -79,6 +97,10 @@
           <div class="field">
             <label for="filter-product">Товар (часть названия)</label>
             <input id="filter-product" type="text" autocomplete="off" placeholder="Например: Хлеб" />
+          </div>
+          <div class="field">
+            <label for="filter-category">Категория</label>
+            <select id="filter-category"></select>
           </div>
         </div>
         <div class="form-actions">

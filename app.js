@@ -8,6 +8,7 @@
   /** Данные в памяти: расходы и отдельный справочник магазинов. */
   var expenses = ExpenseData.loadExpenses();
   var stores = ExpenseData.loadStores();
+  var categories = ["Еда", "Транспорт", "Одежда", "Развлечения"];
 
   /** Если не null — в форме редактируется существующая запись с этим id. */
   var editingId = null;
@@ -15,11 +16,16 @@
   var elProduct = document.getElementById("product-name");
   var elAmount = document.getElementById("amount");
   var elStore = document.getElementById("store-name");
+  var elCategory = document.getElementById("category-name");
   var elDate = document.getElementById("expense-date");
   var elSave = document.getElementById("save-expense");
   var elCancelEdit = document.getElementById("cancel-edit");
   var elNewStore = document.getElementById("new-store-name");
   var elAddStore = document.getElementById("add-store");
+  var elStoreEditSelect = document.getElementById("store-edit-select");
+  var elStoreRenameName = document.getElementById("store-rename-name");
+  var elRenameStore = document.getElementById("rename-store");
+  var elDeleteStore = document.getElementById("delete-store");
   var elFormMessage = document.getElementById("form-message");
 
   var elHistoryList = document.getElementById("history-list");
@@ -31,6 +37,7 @@
   var elFDateTo = document.getElementById("filter-date-to");
   var elFStore = document.getElementById("filter-store");
   var elFProduct = document.getElementById("filter-product");
+  var elFCategory = document.getElementById("filter-category");
   var elResetFilters = document.getElementById("reset-filters");
 
   /** Форматирует число как денежную сумму для отображения (локаль ru). */
@@ -100,6 +107,49 @@
       optExtra.textContent = extra + " (нет в справочнике)";
       elStore.appendChild(optExtra);
     }
+
+    elStoreEditSelect.innerHTML = "";
+    var editEmpty = document.createElement("option");
+    editEmpty.value = "";
+    editEmpty.textContent = "Выберите магазин";
+    elStoreEditSelect.appendChild(editEmpty);
+    for (var j = 0; j < sorted.length; j++) {
+      var editOpt = document.createElement("option");
+      editOpt.value = sorted[j];
+      editOpt.textContent = sorted[j];
+      elStoreEditSelect.appendChild(editOpt);
+    }
+  }
+
+  /** Заполняет список категорий для формы добавления/редактирования и фильтра. */
+  function renderCategorySelects() {
+    elCategory.innerHTML = "";
+    var emptyOption = document.createElement("option");
+    emptyOption.value = "";
+    emptyOption.textContent = "Выберите категорию";
+    elCategory.appendChild(emptyOption);
+    for (var i = 0; i < categories.length; i++) {
+      var option = document.createElement("option");
+      option.value = categories[i];
+      option.textContent = categories[i];
+      elCategory.appendChild(option);
+    }
+
+    elFCategory.innerHTML = "";
+    var allOption = document.createElement("option");
+    allOption.value = "__all__";
+    allOption.textContent = "Все категории";
+    elFCategory.appendChild(allOption);
+    for (var j = 0; j < categories.length; j++) {
+      var filterOption = document.createElement("option");
+      filterOption.value = categories[j];
+      filterOption.textContent = categories[j];
+      elFCategory.appendChild(filterOption);
+    }
+    var noneOption = document.createElement("option");
+    noneOption.value = "Без категории";
+    noneOption.textContent = "Без категории";
+    elFCategory.appendChild(noneOption);
   }
 
   /** Список покупок под формой: новые даты сверху, кнопки «Редактировать» и «Удалить». */
@@ -120,6 +170,8 @@
           escapeHtml(e.storeName) +
           " · " +
           escapeHtml(e.date) +
+          " · " +
+          escapeHtml(e.category || "Без категории") +
           "</div>" +
           "</div>" +
           '<div class="amount">' +
@@ -145,6 +197,7 @@
       dateTo: elFDateTo.value,
       store: elFStore.value,
       product: elFProduct.value,
+      category: elFCategory.value,
     };
   }
 
@@ -166,6 +219,7 @@
     elProduct.value = "";
     elAmount.value = "";
     elStore.value = "";
+    elCategory.value = "";
     elDate.value = ExpenseData.todayLocalISO();
     setFormMessage("", false);
     renderStoreSelect();
@@ -182,6 +236,7 @@
     elProduct.value = row.productName;
     elAmount.value = String(row.amount);
     elDate.value = row.date;
+    elCategory.value = row.category || "Без категории";
     renderStoreSelect(row.storeName);
     elStore.value = row.storeName;
     elSave.textContent = "Сохранить изменения";
@@ -226,10 +281,56 @@
     renderHistory();
   }
 
+  /** Переименование магазина в справочнике и связанных расходах. */
+  function onRenameStore() {
+    var fromName = elStoreEditSelect.value;
+    var toName = elStoreRenameName.value;
+    var result = ExpenseData.renameStore(stores, expenses, fromName, toName);
+    if (!result.ok) {
+      setFormMessage(result.message, true);
+      return;
+    }
+    stores = result.stores;
+    expenses = result.expenses;
+    var keep = editingId ? getExpenseById(editingId) : null;
+    renderStoreSelect(keep ? keep.storeName : "");
+    if (keep) {
+      elStore.value = keep.storeName;
+    }
+    elStoreEditSelect.value = toName.trim();
+    elStoreRenameName.value = "";
+    setFormMessage("Магазин переименован.", false);
+    renderHistory();
+  }
+
+  /** Удаление магазина из справочника (если он не используется в расходах). */
+  function onDeleteStore() {
+    var selectedStore = elStoreEditSelect.value;
+    if (!window.confirm("Удалить выбранный магазин из справочника?")) {
+      return;
+    }
+    var result = ExpenseData.deleteStore(stores, expenses, selectedStore);
+    if (!result.ok) {
+      setFormMessage(result.message, true);
+      return;
+    }
+    stores = result.stores;
+    if (elStore.value && !isStoreInCatalog(elStore.value)) {
+      elStore.value = "";
+    }
+    elStoreRenameName.value = "";
+    renderStoreSelect();
+    setFormMessage("Магазин удалён из справочника.", false);
+  }
+
   function onSave() {
     setFormMessage("", false);
     if (!elStore.value) {
       setFormMessage("Сначала выберите магазин из выпадающего списка.", true);
+      return;
+    }
+    if (!elCategory.value) {
+      setFormMessage("Сначала выберите категорию.", true);
       return;
     }
 
@@ -237,6 +338,7 @@
       productName: elProduct.value,
       amount: elAmount.value,
       storeName: elStore.value.trim(),
+      category: elCategory.value,
       date: elDate.value,
     };
 
@@ -259,6 +361,7 @@
     elProduct.value = "";
     elAmount.value = "";
     elStore.value = "";
+    elCategory.value = "";
     elDate.value = ExpenseData.todayLocalISO();
     setFormMessage("Покупка сохранена.", false);
     renderHistory();
@@ -269,6 +372,7 @@
     elFDateTo.value = "";
     elFStore.value = "";
     elFProduct.value = "";
+    elFCategory.value = "__all__";
   }
 
   /**
@@ -302,9 +406,11 @@
   /** При старте: дата по умолчанию — сегодня. */
   var today = ExpenseData.todayLocalISO();
   renderStoreSelect();
+  renderCategorySelects();
   elDate.value = today;
   elFDateFrom.value = today;
   elFDateTo.value = today;
+  elFCategory.value = "__all__";
 
   renderHistory();
 
@@ -325,6 +431,8 @@
   });
 
   elAddStore.addEventListener("click", onAddStore);
+  elRenameStore.addEventListener("click", onRenameStore);
+  elDeleteStore.addEventListener("click", onDeleteStore);
   elSave.addEventListener("click", onSave);
   elCancelEdit.addEventListener("click", cancelEdit);
   elCalcPeriodTotal.addEventListener("click", onCalcPeriodTotal);
