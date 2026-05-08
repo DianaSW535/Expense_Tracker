@@ -29,6 +29,8 @@
   var elFormMessage = document.getElementById("form-message");
 
   var elHistoryList = document.getElementById("history-list");
+  var elChartByCategory = document.getElementById("chart-by-category");
+  var elChartByDay = document.getElementById("chart-by-day");
 
   var elCalcPeriodTotal = document.getElementById("calc-period-total");
   var elPeriodMessage = document.getElementById("period-message");
@@ -191,6 +193,78 @@
       .join("");
   }
 
+  /**
+   * Псевдографики на div-столбиках:
+   * 1) сумма по категориям
+   * 2) сумма по дням
+   */
+  function renderCharts() {
+    function renderBars(container, pairs, emptyText) {
+      if (!container) {
+        return;
+      }
+      if (!pairs.length) {
+        container.innerHTML =
+          '<p class="message" style="margin: 0;">' + escapeHtml(emptyText) + "</p>";
+        return;
+      }
+
+      var max = pairs.reduce(function (acc, item) {
+        return item.value > acc ? item.value : acc;
+      }, 0);
+
+      container.innerHTML = pairs
+        .map(function (item) {
+          var height = max > 0 ? Math.round((item.value / max) * 100) : 0;
+          return (
+            '<div style="display:grid;grid-template-columns:110px 1fr 70px;align-items:center;gap:8px;margin:6px 0;">' +
+            '<div class="message" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+            escapeHtml(item.label) +
+            "</div>" +
+            '<div style="height:14px;background:rgba(100,116,139,.2);border-radius:999px;overflow:hidden;">' +
+            '<div style="height:100%;width:' +
+            String(height) +
+            '%;background:var(--primary);"></div>' +
+            "</div>" +
+            '<div class="message" style="font-size:12px;text-align:right;">' +
+            escapeHtml(formatMoney(item.value)) +
+            "</div>" +
+            "</div>"
+          );
+        })
+        .join("");
+    }
+
+    var byCategory = {};
+    var byDay = {};
+    for (var i = 0; i < expenses.length; i++) {
+      var row = expenses[i];
+      var category = row.category || "Без категории";
+      var date = row.date || "Без даты";
+      var amount = Number(row.amount) || 0;
+
+      byCategory[category] = (byCategory[category] || 0) + amount;
+      byDay[date] = (byDay[date] || 0) + amount;
+    }
+
+    var categoryPairs = Object.keys(byCategory)
+      .map(function (key) {
+        return { label: key, value: byCategory[key] };
+      })
+      .sort(function (a, b) {
+        return b.value - a.value;
+      });
+
+    var dayPairs = Object.keys(byDay)
+      .sort()
+      .map(function (key) {
+        return { label: key, value: byDay[key] };
+      });
+
+    renderBars(elChartByCategory, categoryPairs, "Нет данных по категориям.");
+    renderBars(elChartByDay, dayPairs, "Нет данных по дням.");
+  }
+
   function readFilters() {
     return {
       dateFrom: elFDateFrom.value,
@@ -257,6 +331,7 @@
     if (editingId === id) {
       cancelEdit();
     } else {
+      renderCharts();
       renderHistory();
     }
   }
@@ -364,6 +439,7 @@
     elCategory.value = "";
     elDate.value = ExpenseData.todayLocalISO();
     setFormMessage("Покупка сохранена.", false);
+    renderCharts();
     renderHistory();
   }
 
@@ -413,6 +489,7 @@
   elFCategory.value = "__all__";
 
   renderHistory();
+  renderCharts();
 
   elHistoryList.addEventListener("click", function (event) {
     var target = event.target;

@@ -77,6 +77,23 @@
       </div>
     </section>
 
+    <!-- Псевдографики трат на div-столбиках -->
+    <section class="section" aria-labelledby="charts-heading">
+      <h2 id="charts-heading">График трат</h2>
+      <div class="panel">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px;">
+          <div>
+            <p class="message" style="margin-bottom: 8px;">По категориям</p>
+            <div id="chart-by-category"></div>
+          </div>
+          <div>
+            <p class="message" style="margin-bottom: 8px;">По дням</p>
+            <div id="chart-by-day"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- V3: единый раздел для периода и фильтрации -->
     <section class="section" aria-labelledby="filter-heading">
       <h2 id="filter-heading">Сумма за период и фильтрация</h2>
